@@ -1,5 +1,6 @@
 # encoding:utf-8
 
+import json
 import time
 
 import openai
@@ -45,6 +46,9 @@ class ChatGPTBot(Bot, OpenAIImage):
 
     def reply(self, query, context=None):
         # acquire reply content
+        print(query)
+        if self.is_forwarded_chat_record(query):
+            return self.process_forwarded_chat_record(query, context)
         if context.type == ContextType.TEXT:
             logger.info("[CHATGPT] query={}".format(query))
 
@@ -62,6 +66,7 @@ class ChatGPTBot(Bot, OpenAIImage):
                 reply = Reply(ReplyType.INFO, "配置已更新")
             if reply:
                 return reply
+            # 识别转发的聊天记录
             session = self.sessions.session_query(query, session_id)
             logger.debug("[CHATGPT] session query={}".format(session.messages))
 
@@ -93,7 +98,6 @@ class ChatGPTBot(Bot, OpenAIImage):
                 reply = Reply(ReplyType.ERROR, reply_content["content"])
                 logger.debug("[CHATGPT] reply {} used 0 tokens.".format(reply_content))
             return reply
-
         elif context.type == ContextType.IMAGE_CREATE:
             ok, retstring = self.create_img(query, 0)
             reply = None
@@ -105,7 +109,37 @@ class ChatGPTBot(Bot, OpenAIImage):
         else:
             reply = Reply(ReplyType.ERROR, "Bot不支持处理{}类型的消息".format(context.type))
             return reply
+    # 检查消息是否为转发的聊天记录
+    def is_forwarded_chat_record(self, query):
+        print("testing if it is chat_history...")
+        try:
+            records = json.loads(query)  # 假设转发的聊天记录是 JSON 格式
+            if isinstance(records, list) and all('role' in record and 'content' in record for record in records):
+                return True
+            return False
+        except json.JSONDecodeError:
+            return False
 
+    # 处理转发的聊天记录
+    def process_forwarded_chat_record(self, query, context):
+        try:
+            records = json.loads(query)
+            session_id = context["session_id"]
+
+            # 存储聊天记录
+            for record in records:
+                role = record["role"]
+                content = record["content"]
+                logger.info(f"[转发聊天记录] 角色: {role}, 内容: {content}")
+
+                # 在这里你可以对聊天记录进行进一步的处理，例如保存到数据库或分析内容
+                # self.sessions.session_reply(content, session_id)
+
+            return Reply(ReplyType.INFO, "聊天记录已成功处理并保存")
+        except Exception as e:
+            logger.error(f"处理聊天记录时出错: {e}")
+            return Reply(ReplyType.ERROR, "处理聊天记录时出错")
+        
     def reply_text(self, session: ChatGPTSession, api_key=None, args=None, retry_count=0) -> dict:
         """
         call openai's ChatCompletion to get the answer
