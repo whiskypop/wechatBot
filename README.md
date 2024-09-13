@@ -1,2 +1,2 @@
 # wechatBot
-wecha bot that can deploy on Azure
+wechat bot that can deploy on Azure
